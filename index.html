@@ -246,6 +246,7 @@ function detectEnviosColumns(headers){
   map.dataEnvio   = findCol(headers, ['data_envio','data de envio','data envio','shipped at','data postagem']);
   map.dataEntrega  = findCol(headers, ['data_entrega','data de entrega','data entrega','delivered at']);
   map.dataPrevisao = findCol(headers, ['data_previsao_entrega_cliente','data previsao entrega','previsao de entrega','data prevista','eta']);
+  map.dataPrimeiraTentativa = findCol(headers, ['data_primeira_tentativa_entrega','data primeira tentativa','primeira_tentativa_entrega','primeira tentativa de entrega']);
   map.status       = findCol(headers, ['status','situacao']);
   map.uf            = findCol(headers, ['uf','estado','uf destino','uf_destino']);
   map.servico       = findCol(headers, ['servico_envio','servico de envio','modal','tipo de envio','servico']);
@@ -314,6 +315,7 @@ function aggregateEnvios(rows){
       econ:0, rapido:0, sumFrete:0, nFrete:0,
       entreguesComPrevisao:0, entreguesNoPrazo:0,
       atrasadosEntregues:0, atrasadosPendentes:0,
+      otdaBase:0, otdaNoPrazo:0,
       byUF:{}, byRegiao:{}, years:{}
     };
     const M = months[mIdx];
@@ -339,6 +341,14 @@ function aggregateEnvios(rows){
       const dPrevPend = col.dataPrevisao>=0 ? toDate(r[col.dataPrevisao]) : null;
       if(dPrevPend && dPrevPend < HOJE){
         M.atrasadosPendentes++;
+      }
+    }
+    if(col.dataPrimeiraTentativa>=0){
+      const dTent = toDate(r[col.dataPrimeiraTentativa]);
+      const dPrevOtda = col.dataPrevisao>=0 ? toDate(r[col.dataPrevisao]) : null;
+      if(dTent && dPrevOtda){
+        M.otdaBase++;
+        if(dTent<=dPrevOtda) M.otdaNoPrazo++;
       }
     }
     if(uf){
@@ -394,7 +404,8 @@ function aggregateEnvios(rows){
       extPct: M.total? M.statusCounts.extraviada/M.total*100:0,
       otdaPct, entreguesComPrevisao: M.entreguesComPrevisao, entreguesNoPrazo: M.entreguesNoPrazo,
       atrasoPct, atrasoCount, atrasadosEntregues: M.atrasadosEntregues||0, atrasadosPendentes: M.atrasadosPendentes||0,
-      otdaManual: null,
+      otdaRealPct: M.otdaBase>0 ? (M.otdaNoPrazo/M.otdaBase*100) : null,
+      otdaRealBase: M.otdaBase||0, otdaRealNoPrazo: M.otdaNoPrazo||0,
       ufRanking,
       regiaoPct,
       pzUF, pzGer
@@ -575,37 +586,37 @@ function regPz(key, m){
 }
 
 /* ===================== HIGHLIGHTS DO PERÍODO (dinâmico) ===================== */
-function getDelayMetric(m, useOTDA){
-  if(useOTDA){
-    const val = (m.otdaManual!=null) ? m.otdaManual : m.otdaPct;
+function getDelayMetric(m){
+  if(m.otdaRealPct!==null && m.otdaRealPct!==undefined){
     return {
-      label: '✅ OTDA', value: val, cls:'teal', icon:'✅',
-      sub: (m.otdaManual!=null) ? 'informado manualmente' : (m.entreguesComPrevisao? `${fmtInt(m.entreguesNoPrazo)} de ${fmtInt(m.entreguesComPrevisao)} · meta: 95%` : 'sem dados de previsão'),
-      chartTitle: 'OTDA (%)', higherIsBetter: true
+      label: '✅ OTDA', value: m.otdaRealPct, cls:'teal', icon:'✅',
+      sub: `${fmtInt(m.otdaRealNoPrazo)} de ${fmtInt(m.otdaRealBase)} entregas`,
+      chartTitle: 'OTDA Mensal (%)', higherIsBetter: true, isReal: true
     };
   }
   return {
     label: '⏱ % de Atraso', value: m.atrasoPct, cls:'amber', icon:'⏱',
     sub: `${fmtInt(m.atrasoCount)} atrasados de ${fmtInt(m.total)}`,
-    chartTitle: '% de Atraso Mensal', higherIsBetter: false
+    chartTitle: '% de Atraso Mensal (estimado)', higherIsBetter: false, isReal: false
   };
 }
 
-function buildHighlights(perf, tktData, periodLabel, useOTDA){
+function buildHighlights(perf, tktData, periodLabel){
   if(perf.length<2) return '';
   const last = perf[perf.length-1], prev = perf[perf.length-2];
   const items = [];
 
-  if(last.otdaPct!==null && prev.otdaPct!==null){
-    const lastDM = getDelayMetric(last, useOTDA), prevDM = getDelayMetric(prev, useOTDA);
-    if(lastDM.value!==null && prevDM.value!==null){
+  {
+    const lastDM = getDelayMetric(last), prevDM = getDelayMetric(prev);
+    if(lastDM.value!==null && prevDM.value!==null && lastDM.isReal===prevDM.isReal){
       const delta = lastDM.value - prevDM.value;
       const up = delta>=0;
-      const isGood = useOTDA ? up : !up;
+      const isGood = lastDM.isReal ? up : !up;
+      const metricName = lastDM.isReal ? 'OTDA' : '% de Atraso';
       items.push({cls: isGood?'good':'bad', ic: up?'↑':'↓',
-        t: `${useOTDA?'OTDA':'% de Atraso'} de ${fmtPct(lastDM.value,2)}`,
-        d: useOTDA
-          ? `${up?'Alta':'Queda'} de <b>${fmtPct(Math.abs(delta),2)} p.p.</b> sobre ${prev.label.toLowerCase()} (${fmtPct(prevDM.value,2)})${lastDM.value>=95?', com folga sobre a meta de 95%.':' — abaixo da meta de 95%.'}`
+        t: `${metricName} de ${fmtPct(lastDM.value,2)}`,
+        d: lastDM.isReal
+          ? `${up?'Alta':'Queda'} de <b>${fmtPct(Math.abs(delta),2)} p.p.</b> sobre ${prev.label.toLowerCase()} (${fmtPct(prevDM.value,2)}).`
           : `${up?'Alta':'Queda'} de <b>${fmtPct(Math.abs(delta),2)} p.p.</b> sobre ${prev.label.toLowerCase()} (${fmtPct(prevDM.value,2)}) — ${fmtInt(last.atrasoCount)} pedidos atrasados de ${fmtInt(last.total)}.`});
     }
   }
@@ -659,13 +670,14 @@ function interpColor(hex1, hex2, t){
   return '#'+c.map(v=>v.toString(16).padStart(2,'0')).join('');
 }
 
-function buildComparativoCharts(perf, useOTDA){
+function buildComparativoCharts(perf){
   const labels = perf.map(m=>m.label);
   const n = perf.length;
   const bg = perf.map((m,i)=>interpColor('#0d3fa8','#2563eb', n>1? i/(n-1) : 0));
-  const dmArr = perf.map(m=>getDelayMetric(m, useOTDA));
-  const delayTitle = useOTDA ? 'OTDA Mensal (%)' : '% de Atraso Mensal';
-  const delayColor = useOTDA ? '#0eb887' : '#f59e0b';
+  const dmArr = perf.map(m=>getDelayMetric(m));
+  const anyReal = dmArr.some(d=>d.isReal);
+  const delayTitle = anyReal ? 'OTDA Mensal (%)' : '% de Atraso Mensal (estimado)';
+  const delayColor = anyReal ? '#0eb887' : '#f59e0b';
   regRaw(`bar('volC',${JSON.stringify(labels)},[{label:'Pacotes',data:${JSON.stringify(perf.map(m=>m.total))},backgroundColor:${JSON.stringify(bg)},borderRadius:6}],{lg:false,fmt:(v)=>v?v.toLocaleString('pt-BR'):''});`);
   regRaw(`bar('tktC',${JSON.stringify(labels)},[{label:'R$',data:${JSON.stringify(perf.map(m=>Number(m.ticketMedio.toFixed(2))))},backgroundColor:${JSON.stringify(bg)},borderRadius:6}],{lg:false,fmt:(v)=>v?'R$'+v.toFixed(2).replace('.',','):''});`);
   regRaw(`bar('otdaC',${JSON.stringify(labels)},[{label:${JSON.stringify(delayTitle)},data:${JSON.stringify(dmArr.map(d=>d.value!==null&&d.value!==undefined?Number(d.value.toFixed(2)):null))},backgroundColor:${JSON.stringify(delayColor)},borderRadius:6}],{lg:false,fmt:(v)=>(v!==null&&v!==undefined)?v.toFixed(2).replace('.',',')+'%':''});`);
@@ -703,7 +715,7 @@ function trendChartsBlock(perf, highlightIdx, prefix){
   return `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:20px;">${cards}</div>`;
 }
 
-function buildPerformanceSection(perf, clientName, periodLabel, colors, tktDataForHighlights, useOTDA){
+function buildPerformanceSection(perf, clientName, periodLabel, colors, tktDataForHighlights){
   if(!perf.length) return '';
   const subBtns = perf.map((m,i)=>`<button class="sub-btn${i===0?' active':''}" onclick="showSubPanel('perf-${m.idx}',this)">📅 ${m.label} ${m.year}</button>`).join('')
     + `<button class="sub-btn" onclick="showSubPanel('perf-comp',this)">📊 Comparativo</button>`;
@@ -711,7 +723,7 @@ function buildPerformanceSection(perf, clientName, periodLabel, colors, tktDataF
   const panels = perf.map((m,i)=>{
     const donutId = `perfDonut${m.idx}`;
     regRaw(`dn(${JSON.stringify(donutId)},['Econômico','Rápido'],${JSON.stringify([Number(m.econPct.toFixed(2)),Number(m.rapidoPct.toFixed(2))])},['#1652f0','#90e0ef']);`);
-    const dm = getDelayMetric(m, useOTDA);
+    const dm = getDelayMetric(m);
     const mesTag = MESES_ABR[m.idx];
 
     const pzKey = String(m.idx);
@@ -737,8 +749,8 @@ function buildPerformanceSection(perf, clientName, periodLabel, colors, tktDataF
   }).join('');
 
   const comp = `<div class="sub-panel" id="perf-comp">
-    ${buildHighlights(perf, tktDataForHighlights, periodLabel, useOTDA)}
-    ${buildComparativoCharts(perf, useOTDA)}
+    ${buildHighlights(perf, tktDataForHighlights, periodLabel)}
+    ${buildComparativoCharts(perf)}
   </div>`;
 
   return `<section class="section" id="performance">
@@ -860,11 +872,8 @@ function buildFinalHTML(cfg){
     firstActive = false;
   }
   if(cfg.includePerformance && cfg.perfData && cfg.perfData.length){
-    if(cfg.useOTDA && cfg.otdaManual){
-      cfg.perfData.forEach(m=>{ if(cfg.otdaManual[m.idx]!=null && !isNaN(cfg.otdaManual[m.idx])) m.otdaManual = Number(cfg.otdaManual[m.idx]); });
-    }
     navBtns.push(`<button class="nav-btn${firstActive?' active':''}" data-target="performance">📊 Performance</button>`);
-    let sec = buildPerformanceSection(cfg.perfData, cfg.clientName, periodLabel, colors, cfg.tktData, !!cfg.useOTDA);
+    let sec = buildPerformanceSection(cfg.perfData, cfg.clientName, periodLabel, colors, cfg.tktData);
     if(firstActive) sec = sec.replace('class="section" id="performance"', 'class="section active" id="performance"');
     sections.push(sec);
     firstActive = false;
