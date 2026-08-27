@@ -55,12 +55,9 @@ iframe.preview{width:100%;height:600px;border:1px solid var(--g-gray-200);border
 
   <div class="card">
     <h2>Cliente</h2>
-    <div id="clientNameBox" style="font-size:14px;color:var(--g-gray-600);">O nome do cliente é identificado automaticamente a partir da planilha (coluna de nome/organização) assim que você subir um arquivo abaixo.</div>
-    <div id="clientNameDetected" style="display:none;margin-top:10px;padding:10px 14px;background:#f0fdf9;border:1px solid #bbf7d0;border-radius:10px;font-size:14px;color:#065f46;font-weight:700;">
-      ✅ Cliente identificado: <span id="clientNameValue"></span>
-      <button type="button" id="editClientBtn" style="margin-left:10px;background:none;border:none;color:#065f46;text-decoration:underline;font-size:12px;font-weight:600;cursor:pointer;">editar</button>
-    </div>
-    <input type="text" id="clientName" style="display:none;margin-top:10px;">
+    <label for="clientName" style="display:block;font-size:13px;font-weight:600;color:var(--g-gray-600);margin-bottom:6px;">Nome do cliente</label>
+    <input type="text" id="clientName" placeholder="Ex: Hey!Mu" style="width:100%;padding:10px 12px;border:1px solid var(--g-gray-200);border-radius:10px;font-size:14px;font-family:inherit;">
+    <div class="t-desc" style="margin-top:6px;">Preenchido automaticamente ao subir um arquivo (coluna de nome/organização), mas você pode digitar ou corrigir aqui a qualquer momento.</div>
   </div>
 
   <div class="card">
@@ -270,10 +267,21 @@ function toDate(v){
   if(v instanceof Date) return v;
   if(typeof v === 'number'){ // serial excel
     const d = XLSX.SSF.parse_date_code(v);
-    if(d) return new Date(d.y, d.m-1, d.d);
+    if(d) return new Date(d.y, d.m-1, d.d, d.H||0, d.M||0, d.S||0);
   }
   if(typeof v === 'string' && v.trim()){
-    const d = new Date(v);
+    const s = v.trim();
+    // ISO "YYYY-MM-DD" ou "YYYY-MM-DDTHH:mm:ss" — construído como data LOCAL (evita bug de fuso UTC->local)
+    let m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/);
+    if(m){
+      return new Date(+m[1], +m[2]-1, +m[3], +(m[4]||0), +(m[5]||0), +(m[6]||0));
+    }
+    // formato brasileiro "DD/MM/YYYY"
+    m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/);
+    if(m){
+      return new Date(+m[3], +m[2]-1, +m[1], +(m[4]||0), +(m[5]||0), +(m[6]||0));
+    }
+    const d = new Date(s);
     if(!isNaN(d)) return d;
   }
   return null;
@@ -1003,10 +1011,9 @@ function wireDrop(dropId, fileId){
     try{
       const rows = await sheetToRows(file);
       const detected = detectClientName(rows);
-      if(detected && !window.__clientNameManuallyEdited){
-        document.getElementById('clientName').value = detected;
-        document.getElementById('clientNameValue').textContent = detected;
-        document.getElementById('clientNameDetected').style.display = 'block';
+      const clientInput = document.getElementById('clientName');
+      if(detected && !clientInput.value.trim() && !clientInput.dataset.userEdited){
+        clientInput.value = detected;
       }
       if(fileId === 'fileEnvios'){
         try{
@@ -1044,14 +1051,7 @@ function wireDrop(dropId, fileId){
 wireDrop('dropEnvios','fileEnvios');
 wireDrop('dropTickets','fileTickets');
 
-document.getElementById('editClientBtn').addEventListener('click', ()=>{
-  window.__clientNameManuallyEdited = true;
-  document.getElementById('clientNameDetected').style.display = 'none';
-  const input = document.getElementById('clientName');
-  input.style.display = 'block';
-  input.placeholder = 'Nome do cliente';
-  input.focus();
-});
+document.getElementById('clientName').addEventListener('input', (e)=>{ e.target.dataset.userEdited = '1'; });
 
 function log(msg, cls){
   const el = document.getElementById('log');
