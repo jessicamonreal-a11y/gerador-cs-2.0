@@ -255,7 +255,7 @@ function classifyStatus(raw){
   const s = normalize(raw);
   if(s.includes('entreg')) return 'entregue';
   if(s.includes('extravi')) return 'extraviada';
-  if(s.includes('devolv')) return 'devolvida';
+  if(s.includes('devol')) return 'devolvida';
   return 'enviada';
 }
 function classifyServico(raw){
@@ -406,23 +406,13 @@ function aggregateEnvios(rows){
     const atrasoCount = (M.atrasadosEntregues||0) + (M.atrasadosPendentes||0);
     const atrasoPct = M.total ? (atrasoCount/M.total*100) : 0;
 
-    // % de Extravio/Devolução — agrupados pelo mês da DATA PREVISTA de entrega (não pelo mês de envio),
-    // com fallback pro cálculo por mês de envio quando não há coluna de data prevista.
-    let devPctFinal, extPctFinal, devCountFinal, extCountFinal, totalPrevisaoFinal;
-    if(col.dataPrevisao>=0){
-      const P = monthsByPrevisao[idx];
-      totalPrevisaoFinal = P ? P.total : 0;
-      devCountFinal = P ? P.devolvida : 0;
-      extCountFinal = P ? P.extraviada : 0;
-      devPctFinal = totalPrevisaoFinal ? (devCountFinal/totalPrevisaoFinal*100) : 0;
-      extPctFinal = totalPrevisaoFinal ? (extCountFinal/totalPrevisaoFinal*100) : 0;
-    } else {
-      totalPrevisaoFinal = M.total;
-      devCountFinal = M.statusCounts.devolvida;
-      extCountFinal = M.statusCounts.extraviada;
-      devPctFinal = M.total? M.statusCounts.devolvida/M.total*100:0;
-      extPctFinal = M.total? M.statusCounts.extraviada/M.total*100:0;
-    }
+    // % de Extravio/Devolução — agrupados pelo MÊS DE ENVIO (voltando ao padrão original:
+    // testes contra o relatório de referência confirmaram que esse é o agrupamento correto).
+    const devCountFinal = M.statusCounts.devolvida;
+    const extCountFinal = M.statusCounts.extraviada;
+    const totalPrevisaoFinal = M.total;
+    const devPctFinal = M.total? M.statusCounts.devolvida/M.total*100:0;
+    const extPctFinal = M.total? M.statusCounts.extraviada/M.total*100:0;
     const pzUF = {};
     ufRanking.forEach(u=>{ if(u.prazo!==null) pzUF[u.uf] = [Number(u.prazo.toFixed(2)), Number((u.prazoUtil||u.prazo*0.75).toFixed(2)), u.vol]; });
     const validEntregasConcluidas = ufRanking.reduce((a,u)=>a + (u.prazo!==null?u.vol:0), 0);
