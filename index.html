@@ -310,7 +310,8 @@ function aggregateEnvios(rows){
   if(missing.length){
     throw new Error('Não encontrei as colunas: '+missing.join(', ')+'. Verifique o cabeçalho do arquivo de envios.');
   }
-  const months = {}; // key: monthIndex 0-11 -> aggregate object
+  const months = {}; // key: monthIndex 0-11 -> aggregate object (agrupado por MÊS DE ENVIO)
+  const monthsByPrevisao = {}; // key: monthIndex 0-11 -> aggregate object (agrupado por MÊS DA DATA PREVISTA — usado só para extravio/devolução)
   const HOJE = new Date();
   for(let i=1;i<rows.length;i++){
     const r = rows[i];
@@ -332,6 +333,19 @@ function aggregateEnvios(rows){
     M.years[yr] = (M.years[yr]||0) + 1;
     const st = classifyStatus(r[col.status]);
     M.statusCounts[st]++;
+    if(col.dataPrevisao>=0){
+      const dPrevM = toDate(r[col.dataPrevisao]);
+      if(dPrevM){
+        const pIdx = dPrevM.getMonth();
+        const pYr = dPrevM.getFullYear();
+        if(!monthsByPrevisao[pIdx]) monthsByPrevisao[pIdx] = {total:0, extraviada:0, devolvida:0, years:{}};
+        const P = monthsByPrevisao[pIdx];
+        P.total++;
+        P.years[pYr] = (P.years[pYr]||0) + 1;
+        if(st==='extraviada') P.extraviada++;
+        if(st==='devolvida') P.devolvida++;
+      }
+    }
     const serv = col.servico>=0 ? classifyServico(r[col.servico]) : 'Econômico';
     if(serv==='Rápido') M.rapido++; else M.econ++;
     const frete = toNumberBR(r[col.frete]);
@@ -351,13 +365,11 @@ function aggregateEnvios(rows){
         M.atrasadosPendentes++;
       }
     }
-    if(col.dataPrimeiraTentativa>=0){
+    if(col.dataPrimeiraTentativa>=0 && st==='entregue'){
       const dTent = toDate(r[col.dataPrimeiraTentativa]);
       const dPrevOtda = col.dataPrevisao>=0 ? toDate(r[col.dataPrevisao]) : null;
-      if(dTent && dPrevOtda){
-        M.otdaBase++;
-        if(dTent<=dPrevOtda) M.otdaNoPrazo++;
-      }
+      M.otdaBase++;
+      if(dTent && dPrevOtda && dTent<=dPrevOtda) M.otdaNoPrazo++;
     }
     if(uf){
       if(!M.byUF[uf]) M.byUF[uf] = {vol:0,sumFrete:0,nFrete:0,sumDias:0,nDias:0,sumDiasUteis:0,nDiasUteis:0};
@@ -393,6 +405,24 @@ function aggregateEnvios(rows){
     const otdaPct = M.entreguesComPrevisao ? (M.entreguesNoPrazo/M.entreguesComPrevisao*100) : null;
     const atrasoCount = (M.atrasadosEntregues||0) + (M.atrasadosPendentes||0);
     const atrasoPct = M.total ? (atrasoCount/M.total*100) : 0;
+
+    // % de Extravio/Devolução — agrupados pelo mês da DATA PREVISTA de entrega (não pelo mês de envio),
+    // com fallback pro cálculo por mês de envio quando não há coluna de data prevista.
+    let devPctFinal, extPctFinal, devCountFinal, extCountFinal, totalPrevisaoFinal;
+    if(col.dataPrevisao>=0){
+      const P = monthsByPrevisao[idx];
+      totalPrevisaoFinal = P ? P.total : 0;
+      devCountFinal = P ? P.devolvida : 0;
+      extCountFinal = P ? P.extraviada : 0;
+      devPctFinal = totalPrevisaoFinal ? (devCountFinal/totalPrevisaoFinal*100) : 0;
+      extPctFinal = totalPrevisaoFinal ? (extCountFinal/totalPrevisaoFinal*100) : 0;
+    } else {
+      totalPrevisaoFinal = M.total;
+      devCountFinal = M.statusCounts.devolvida;
+      extCountFinal = M.statusCounts.extraviada;
+      devPctFinal = M.total? M.statusCounts.devolvida/M.total*100:0;
+      extPctFinal = M.total? M.statusCounts.extraviada/M.total*100:0;
+    }
     const pzUF = {};
     ufRanking.forEach(u=>{ if(u.prazo!==null) pzUF[u.uf] = [Number(u.prazo.toFixed(2)), Number((u.prazoUtil||u.prazo*0.75).toFixed(2)), u.vol]; });
     const validEntregasConcluidas = ufRanking.reduce((a,u)=>a + (u.prazo!==null?u.vol:0), 0);
@@ -408,8 +438,9 @@ function aggregateEnvios(rows){
       econPct: M.total? M.econ/M.total*100:0,
       rapidoPct: M.total? M.rapido/M.total*100:0,
       ticketMedio: M.nFrete? M.sumFrete/M.nFrete : 0,
-      devPct: M.total? M.statusCounts.devolvida/M.total*100:0,
-      extPct: M.total? M.statusCounts.extraviada/M.total*100:0,
+      devPct: devPctFinal,
+      extPct: extPctFinal,
+      devCount: devCountFinal, extCount: extCountFinal, totalPrevisao: totalPrevisaoFinal,
       otdaPct, entreguesComPrevisao: M.entreguesComPrevisao, entreguesNoPrazo: M.entreguesNoPrazo,
       atrasoPct, atrasoCount, atrasadosEntregues: M.atrasadosEntregues||0, atrasadosPendentes: M.atrasadosPendentes||0,
       otdaRealPct: M.otdaBase>0 ? (M.otdaNoPrazo/M.otdaBase*100) : null,
@@ -511,6 +542,7 @@ function shadeColor(hex, pct){
   b = Math.min(255,Math.max(0, Math.round(b + (pct<0? b: (255-b))*pct)));
   return '#' + [r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('');
 }
+
 
 </script>
 <script>
@@ -640,14 +672,14 @@ function buildHighlights(perf, tktData, periodLabel){
     const down = delta<=0;
     items.push({cls: down?'good':'bad', ic: down?'↓':'↑',
       t: `Extravios em ${fmtPct(last.extPct,2)}`,
-      d: `${down?'Queda':'Alta'} de <b>${fmtPct(Math.abs(delta),2).replace('%','')} p.p.</b> frente a ${prev.label.toLowerCase()} — ${fmtInt(last.statusCounts.extraviada)} pacotes em ${fmtInt(last.total)} remessas.`});
+      d: `${down?'Queda':'Alta'} de <b>${fmtPct(Math.abs(delta),2).replace('%','')} p.p.</b> frente a ${prev.label.toLowerCase()} — ${fmtInt(last.extCount)} pacotes em ${fmtInt(last.totalPrevisao)} previstos para o mês.`});
   }
   {
     const delta = last.devPct - prev.devPct;
     const down = delta<=0;
     items.push({cls: down?'good':'bad', ic: down?'↓':'↑',
       t: `Devoluções em ${fmtPct(last.devPct,2)}`,
-      d: `${down?'Queda':'Alta'} de <b>${fmtPct(Math.abs(delta),2).replace('%','')} p.p.</b> frente a ${prev.label.toLowerCase()} — ${fmtInt(last.statusCounts.devolvida)} pedidos em ${fmtInt(last.total)} remessas.`});
+      d: `${down?'Queda':'Alta'} de <b>${fmtPct(Math.abs(delta),2).replace('%','')} p.p.</b> frente a ${prev.label.toLowerCase()} — ${fmtInt(last.devCount)} pedidos em ${fmtInt(last.totalPrevisao)} previstos para o mês.`});
   }
   if(last.econPct>=90){
     items.push({cls:'op', ic:'⚡',
@@ -745,8 +777,8 @@ function buildPerformanceSection(perf, clientName, periodLabel, colors, tktDataF
       <div class="grid-5" style="margin-bottom:24px;">
         ${metricCard('blue','📦 Pacotes', fmtInt(m.total), `${m.label} ${m.year}`, '📦')}
         ${metricCard(dm.cls, dm.label, dm.value!==null&&dm.value!==undefined?fmtPct(dm.value,2):'—', dm.sub, dm.icon)}
-        ${metricCard('red','↩️ Devoluções', fmtPct(m.devPct,2), `${m.statusCounts.devolvida} pedidos · de ${fmtInt(m.total)}`, '↩️')}
-        ${metricCard('amber','📍 Extraviados', fmtPct(m.extPct,2), `${m.statusCounts.extraviada} pedidos · de ${fmtInt(m.total)}`, '📍')}
+        ${metricCard('red','↩️ Devoluções', fmtPct(m.devPct,2), `${m.devCount} pedidos · de ${fmtInt(m.totalPrevisao)} previstos`, '↩️')}
+        ${metricCard('amber','📍 Extraviados', fmtPct(m.extPct,2), `${m.extCount} pedidos · de ${fmtInt(m.totalPrevisao)} previstos`, '📍')}
         ${metricCard('blue','🏷️ Ticket Médio', fmtMoney(m.ticketMedio), 'frete por remessa', '🏷️')}
       </div>
       <div style="margin-bottom:24px;"><div class="card"><div class="card-header"><div class="card-title">Modalidade</div><span style="background:#eff3ff;color:var(--blue);font-size:11px;font-weight:600;padding:3px 10px;border-radius:100px">${mesTag}</span></div><div style="position:relative;height:200px"><canvas id="${donutId}"></canvas></div><div style="display:flex;justify-content:center;gap:16px;margin-top:10px;font-size:11px;color:var(--gray-600)"><span style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:var(--blue);display:inline-block"></span>Econômico ${fmtPct(m.econPct,1)}</span><span style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:#90e0ef;display:inline-block"></span>Rápido ${fmtPct(m.rapidoPct,1)}</span></div></div></div>
@@ -982,6 +1014,7 @@ ${sections.join('\n')}
 </html>`;
 }
 
+
 </script>
 <script>
 function toggleBlock(chkId, blockId){
@@ -1113,6 +1146,7 @@ document.getElementById('btnGerar').addEventListener('click', async ()=>{
     btn.disabled = false; btn.textContent = 'Gerar Painel';
   }
 });
+
 </script>
 </body>
 </html>
