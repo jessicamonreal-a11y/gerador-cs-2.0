@@ -97,6 +97,14 @@ iframe.preview{width:100%;height:600px;border:1px solid var(--g-gray-200);border
         <input type="checkbox" id="chkEsquenta">
         <div><div class="t-title">🔥 Esquenta Black 2026</div><div class="t-desc">Conteúdo fixo da apresentação Nuvemshop Next: mercado, atendimento, hubs, capacidade e calendário da Black Friday.</div></div>
       </label>
+      <label class="tab-opt" data-tab="peak">
+        <input type="checkbox" id="chkPeak">
+        <div><div class="t-title">🏷️ Ação Black Friday</div><div class="t-desc">Régua de desconto Peak Season (Out–Dez 2026). Os valores mudam por cliente: cole abaixo a linha da planilha.</div></div>
+      </label>
+      <div class="upload-block" id="blockPeak">
+        <textarea id="peakPaste" rows="4" spellcheck="false" placeholder="Cole aqui a linha do cliente, copiada da planilha (colunas separadas por tab)" style="width:100%;padding:10px 12px;border:1.5px dashed var(--g-gray-200);border-radius:12px;font-size:12.5px;font-family:inherit;resize:vertical;"></textarea>
+        <div class="log" id="peakCheck" style="margin-top:6px;"></div>
+      </div>
     </div>
   </div>
 
@@ -441,6 +449,270 @@ function ESQ_INIT(){
 function esqOnceScript(){
   return 'var ESQ_MEDIA='+JSON.stringify(ESQ_MEDIA)+';\n'+ESQ_INIT.toString()+'\ntry{ ESQ_INIT(); }catch(e){ console.error("esquenta",e); }';
 }
+
+/* ===================== MÓDULO: AÇÃO BLACK FRIDAY ===================== */
+/* Aba opcional do painel: Régua de Desconto Peak Season (Out–Dez 2026).
+   Os valores mudam por cliente e vêm de uma linha colada da planilha (colunas separadas por tab). */
+const PEAK_CSS = `
+/* ---- Ação Black Friday · Régua Peak Season ---- */
+.pk-hero{background:linear-gradient(135deg,var(--navy) 0%,var(--blue) 65%,#1a7fd4 100%);border-radius:var(--radius);padding:26px 28px;color:#fff;margin-bottom:20px;display:grid;grid-template-columns:1.4fr 1fr;gap:24px;align-items:center}
+.pk-hero h3{margin:0 0 8px;font-size:20px}
+.pk-hero p{margin:0;font-size:13.5px;line-height:1.6;color:rgba(255,255,255,.85)}
+.pk-base{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);border-radius:12px;padding:16px 18px}
+.pk-base span{font-size:11px;text-transform:uppercase;letter-spacing:.8px;opacity:.75}
+.pk-base b{display:block;font-size:28px;margin:2px 0}
+.pk-base small{font-size:12px;opacity:.8}
+.pk-tiers{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
+.pk-tier{background:#fff;border:1px solid var(--gray-200);border-radius:var(--radius);padding:18px;position:relative;overflow:hidden}
+.pk-tier::before{content:"";position:absolute;left:0;top:0;right:0;height:4px;background:var(--gray-200)}
+.pk-tier.t1::before{background:#60a5fa}.pk-tier.t2::before{background:var(--blue)}.pk-tier.t3::before{background:linear-gradient(90deg,#f59e0b,#fbbf24)}
+.pk-tier .pk-n{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--gray-400)}
+.pk-tier .pk-pct{font-size:34px;font-weight:800;color:var(--navy);line-height:1.1;margin:6px 0 2px}
+.pk-tier.t3 .pk-pct{color:#b45309}
+.pk-tier .pk-rng{font-size:12.5px;color:var(--gray-600);margin-bottom:12px;min-height:36px}
+.pk-tier .pk-kv{display:flex;justify-content:space-between;font-size:12.5px;padding:5px 0;border-top:1px dashed var(--gray-200);color:var(--gray-600)}
+.pk-tier .pk-kv b{color:var(--navy);font-variant-numeric:tabular-nums}
+.pk-tier .pk-kv b.g{color:#059669}
+.pk-tier .pk-tag{display:inline-block;margin-top:10px;font-size:11px;font-weight:600;padding:3px 10px;border-radius:100px;background:#eff3ff;color:var(--blue)}
+.pk-tier.t3 .pk-tag{background:#fef3c7;color:#b45309}
+.pk-tier.t0 .pk-tag{background:var(--gray-100);color:var(--gray-600)}
+.pk-table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+.pk-table th{font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:.6px;padding:0 12px 10px;text-align:right;border-bottom:1px solid var(--gray-200)}
+.pk-table td{padding:10px 12px;border-bottom:1px solid var(--gray-100);text-align:right;color:var(--gray-600)}
+.pk-table th:first-child,.pk-table td:first-child{text-align:left}
+.pk-table td:first-child{color:var(--gray-800);font-weight:500}
+.pk-table tr.hl td{background:#fffbeb}
+.pk-table td b{color:var(--navy)}
+.pk-adv{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.pk-adv-i{background:var(--gray-50);border:1px solid var(--gray-200);border-left:4px solid var(--blue);border-radius:12px;padding:16px}
+.pk-adv-i.am{border-left-color:#f59e0b}.pk-adv-i.gr{border-left-color:#10b981}
+.pk-adv-i h4{margin:0 0 6px;font-size:14px;color:var(--navy)}
+.pk-adv-i p{margin:0;font-size:12.8px;line-height:1.6;color:var(--gray-600)}
+.pk-adv-i p b{color:var(--navy)}
+.pk-sim{display:grid;grid-template-columns:1fr 1.3fr;gap:24px;align-items:start}
+.pk-sim label{font-size:12px;font-weight:600;color:var(--gray-600);display:block;margin-bottom:6px}
+.pk-in{display:flex;align-items:center;border:1px solid var(--gray-200);border-radius:10px;padding:0 12px;background:#fff}
+.pk-in span{color:var(--gray-400);font-weight:600}
+.pk-in input{border:0;outline:0;font:inherit;font-size:20px;font-weight:700;color:var(--navy);padding:10px 8px;width:100%;background:transparent}
+.pk-range{width:100%;margin-top:14px;accent-color:var(--blue)}
+.pk-quick{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.pk-quick button{border:1px solid var(--gray-200);background:#fff;border-radius:100px;padding:5px 11px;font:inherit;font-size:11.5px;color:var(--gray-600);cursor:pointer}
+.pk-quick button:hover{border-color:var(--blue);color:var(--blue)}
+.pk-res{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.pk-res div{background:var(--gray-50);border:1px solid var(--gray-200);border-radius:10px;padding:12px 14px}
+.pk-res span{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--gray-400);font-weight:700}
+.pk-res b{display:block;font-size:19px;color:var(--navy);font-variant-numeric:tabular-nums;margin-top:2px}
+.pk-res b.g{color:#059669}
+.pk-next{grid-column:1/-1;font-size:13px;color:var(--gray-600);background:#eff3ff!important;border-color:#dbe5ff!important}
+.pk-next b{display:inline!important;font-size:13px!important}
+.pk-bar{position:relative;height:14px;border-radius:100px;background:var(--gray-100);margin:26px 0 30px}
+.pk-bar-f{position:absolute;left:0;top:0;bottom:0;border-radius:100px;background:linear-gradient(90deg,#60a5fa,var(--blue))}
+.pk-mk{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--navy)}
+.pk-mk span{position:absolute;top:22px;left:50%;transform:translateX(-50%);font-size:10.5px;color:var(--gray-600);white-space:nowrap;font-weight:600}
+.pk-mk.top span{top:-20px}
+.pk-note{font-size:11.5px;color:var(--gray-400);margin-top:10px;line-height:1.5}
+@media (max-width:900px){.pk-hero,.pk-sim{grid-template-columns:1fr}.pk-tiers{grid-template-columns:repeat(2,1fr)}.pk-adv{grid-template-columns:1fr}}
+@media (max-width:560px){.pk-tiers{grid-template-columns:1fr}.pk-res{grid-template-columns:1fr}}
+`;
+
+function peakMoney(c){
+  const v = parseFloat(String(c).replace(/R\$/i,'').replace(/\s/g,'').replace(/\./g,'').replace(',','.'));
+  return isNaN(v) ? 0 : v;
+}
+function peakPct(c){
+  const v = parseFloat(String(c).replace('%','').replace(/\s/g,'').replace(',','.'));
+  return isNaN(v) ? 0 : v;
+}
+
+/* Lê a linha colada. Ignora as colunas internas (e-mail do CS, ID, status, tabela de preço...) e usa só o que
+   a aba precisa: sequência de valores R$ (meses + média), e os pares percentual/valor de cada faixa. */
+function parsePeakRow(text){
+  const lines = String(text||'').split(/\r?\n/).filter(l=>l.trim());
+  const line = lines.find(l=>(l.match(/R\$/g)||[]).length>=8);
+  if(!line) throw new Error('Ação Black Friday: cole a linha do cliente copiada da planilha (com as colunas separadas por tab).');
+  const cells = line.split('\t').map(c=>c.trim().replace(/^"+|"+$/g,'').trim()).filter(c=>c!=='');
+  const isMoney = c=>/^R\$\s*-?\d[\d.]*(,\d+)?$/.test(c);
+  const isPct = c=>/^\d+([,.]\d+)?\s*%$/.test(c);
+  const iPct = cells.findIndex(isPct);
+  if(iPct<0) throw new Error('Ação Black Friday: não encontrei as colunas de faixa (percentuais de desconto) na linha colada.');
+  const head = cells.slice(0,iPct), tail = cells.slice(iPct);
+  const iFirst = head.findIndex(isMoney);
+  if(iFirst<0) throw new Error('Ação Black Friday: não encontrei os valores de frete mensal na linha colada.');
+  let iEnd = iFirst; while(iEnd<head.length && isMoney(head[iEnd])) iEnd++;
+  const run = head.slice(iFirst,iEnd).map(peakMoney);   // meses ... média (a média é sempre o último)
+  if(run.length<4) throw new Error('Ação Black Friday: esperava os 3 meses de frete e a média, mas a linha tem menos colunas de valor.');
+  const base = run[run.length-1];
+  const months = run.slice(run.length-4, run.length-1);  // os 3 meses que antecedem a média
+  const pcts = tail.filter(isPct).map(peakPct);
+  const mins = tail.filter(isMoney).map(peakMoney);
+  if(pcts.length<4 || mins.length<3) throw new Error('Ação Black Friday: esperava Base + 3 faixas (percentual e valor de entrada), mas a linha colada tem menos.');
+  const tiers = [0,1,2].map(i=>({min:mins[i], pct:pcts[i+1]}));
+  if(!(base>0)) throw new Error('Ação Black Friday: a média de frete veio zerada.');
+  if(!(tiers[0].min>base && tiers[1].min>tiers[0].min && tiers[2].min>tiers[1].min && tiers[0].pct<tiers[1].pct && tiers[1].pct<tiers[2].pct))
+    throw new Error('Ação Black Friday: as faixas precisam estar em ordem crescente (valor e percentual) e acima da média. Confira a linha colada.');
+  const avg = months.reduce((a,b)=>a+b,0)/3;
+  return {nome:cells[0], base, months, tiers, avgOk: Math.abs(avg-base)<=1};
+}
+
+/* Data do último envio de outubro no arquivo de Envios (rótulo "parcial · até dd/mm"). */
+function peakLastShip(rows){
+  try{
+    const col = detectEnviosColumns(rows[0]); let max = null;
+    for(let i=1;i<rows.length;i++){
+      const r = rows[i]; if(!r) continue;
+      const d = toDate(r[col.dataEnvio]);
+      if(d && d.getMonth()===9 && (!max || d>max)) max = d;
+    }
+    return max ? String(max.getDate()).padStart(2,'0')+'/'+String(max.getMonth()+1).padStart(2,'0') : null;
+  }catch(e){ return null; }
+}
+
+function peakLimits(P){
+  const t3 = P.tiers[2].min;
+  const step = t3>=100000?5000 : t3>=20000?1000 : t3>=5000?100 : t3>=1000?50 : 10;
+  const U = step*2;
+  return {step, min:Math.floor(P.base*0.88/U)*U, max:Math.round(t3*1.28/U)*U, slider:Math.max(1,U/20)};
+}
+
+function buildPeakSection(P, clientName, out){
+  const esc = s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const nm = esc(clientName);
+  const base = P.base, m = P.months, t1 = P.tiers[0], t2 = P.tiers[1], t3 = P.tiers[2];
+  const L = peakLimits(P);
+  const R  = v=>'R$ '+Math.round(v).toLocaleString('pt-BR');
+  const R2 = v=>'R$ '+v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const P1 = p=>p.toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%';
+  const PN = p=>p.toLocaleString('pt-BR')+'%';
+  const G  = v=>'+'+((v/base-1)*100).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%';
+  const K  = v=>v>=1000 ? 'R$ '+(v/1000).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+' mil' : R(v);
+  const disc = (v,p)=>v*p/100;
+  const fin  = (v,p)=>v-disc(v,p);
+
+  // linhas da tabela de simulação
+  const rnd = v=>Math.round(v/L.step)*L.step;
+  const rowsV = [];
+  [t1.min, rnd((t1.min+t2.min)/2), t2.min, t3.min, rnd(t3.min*1.08), rnd(t3.min*1.23)].forEach(v=>{
+    if(v>(rowsV.length?rowsV[rowsV.length-1]:base)) rowsV.push(v);
+  });
+  const tierOf = v=> v>=t3.min?['Faixa 3',t3.pct] : v>=t2.min?['Faixa 2',t2.pct] : v>=t1.min?['Faixa 1',t1.pct] : ['Base',0];
+  const row = (v,hl)=>{ const tp=tierOf(v), e=disc(v,tp[1]);
+    return `<tr${hl?' class="hl"':''}><td>${R(v)}</td><td>${tp[0]}</td><td>${tp[1]?P1(tp[1]):'0%'}</td><td><b>${R2(e)}</b></td><td>${R2(v-e)}</td><td>${G(v)}</td></tr>`; };
+
+  const f2 = fin(t2.min,t2.pct), f3 = fin(t3.min,t3.pct);
+  const degrausBeats = f3 < f2;
+
+  // vantagens
+  const extra = t3.min-base, paid = f3-base, less = Math.round((1-paid/extra)*100);
+  const dPrev1 = Math.round(disc(t2.min-1,t1.pct)), dNow1 = Math.round(disc(t2.min,t2.pct));
+  const dPrev2 = Math.round(disc(t3.min-1,t2.pct)), dNow2 = Math.round(disc(t3.min,t3.pct));
+  const adv2 = degrausBeats
+    ? `Quem chega a <b>${R(t3.min)}</b> paga <b>${R(f3)}</b> de valor final, menos do que quem fica em ${R(t2.min)} (${R(f2)}). Ou seja: os últimos <b>${R(t3.min-t2.min)}</b> de frete até a Faixa 3 saem, na prática, de graça, e ainda sobram <b>${R(f2-f3)}</b>.`
+    : `Ao chegar a <b>${R(t3.min)}</b>, o desconto sobre todo o frete do mês passa a <b>${PN(t3.pct)}</b>, o que dá <b>${R(disc(t3.min,t3.pct))}</b> de economia na fatura.`;
+
+  // acompanhamento de outubro (vem do arquivo de Envios / aba Performance)
+  let acomp = '';
+  if(out && out.fat!=null){
+    const f = out.fat;
+    const falta = min=> f>=min ? '✅ Atingida' : R(min-f);
+    acomp = `
+    <div class="card" style="margin-bottom:20px;"><div class="card-header"><div class="card-title">Acompanhamento — Outubro 2026</div><span style="background:#fef3c7;color:#b45309;font-size:11px;font-weight:600;padding:3px 10px;border-radius:100px">parcial${out.ate?' · até '+out.ate:''}</span></div>
+      <div class="pk-res" style="grid-template-columns:repeat(3,1fr)">
+        <div><span>Frete enviado em outubro</span><b>${R(f)}</b></div>
+        <div><span>Falta para a Faixa 1 (${PN(t1.pct)})</span><b>${falta(t1.min)}</b></div>
+        <div><span>Falta para a Faixa 3 (${PN(t3.pct)})</span><b>${falta(t3.min)}</b></div>
+      </div>
+      <p class="pk-note">Mesmo faturamento da aba Performance (valor de frete das remessas enviadas${out.ate?' de 01/10 a '+out.ate:' em outubro'}). Novembro e dezembro concentram a Black Friday e as festas de fim de ano, que são os meses com mais chance de atingir as faixas.</p>
+    </div>`;
+  }
+
+  const mk = (v,txt,top)=>`<div class="pk-mk${top?' top':''}" style="left:${((v-L.min)/(L.max-L.min)*100).toFixed(1)}%"><span>${txt}</span></div>`;
+
+  return `<section class="section" id="peak">
+    <div class="sec-label">Ação Black Friday · Out–Dez 2026</div>
+    <div class="sec-title">Régua de Desconto Peak Season — ${nm}</div>
+    <div class="sec-desc">Quanto mais a ${nm} envia pela coleta em outubro, novembro e dezembro, maior o desconto. O desconto entra na próxima fatura e vale sobre o valor inteiro, não só sobre o que cresceu.</div>
+
+    <div class="pk-hero">
+      <div><h3>🚀 Você já está participando</h3><p>Não é preciso fazer nada para participar. A régua foi montada a partir da média de frete da ${nm} nos últimos 3 meses (julho a setembro). Basta crescer o volume enviado para entrar nas faixas de desconto.</p></div>
+      <div class="pk-base"><span>Média mensal de frete · Jul–Set</span><b>${R(base)}</b><small>Jul ${R(m[0])} · Ago ${R(m[1])} · Set ${R(m[2])}</small></div>
+    </div>
+
+    <div class="pk-tiers">
+      <div class="pk-tier t0"><div class="pk-n">Base</div><div class="pk-pct">0%</div><div class="pk-rng">Abaixo de ${R(t1.min)}</div><div class="pk-kv"><span>Desconto</span><b>—</b></div><div class="pk-kv"><span>Crescimento vs. média</span><b>até ${G(t1.min)}</b></div><span class="pk-tag">Sem desconto</span></div>
+      <div class="pk-tier t1"><div class="pk-n">Faixa 1</div><div class="pk-pct">${P1(t1.pct)}</div><div class="pk-rng">De ${R(t1.min)} até abaixo de ${R(t2.min)}</div><div class="pk-kv"><span>Desconto na entrada</span><b class="g">${R(disc(t1.min,t1.pct))}</b></div><div class="pk-kv"><span>Valor final na entrada</span><b>${R(fin(t1.min,t1.pct))}</b></div><div class="pk-kv"><span>Crescimento vs. média</span><b>${G(t1.min)}</b></div><span class="pk-tag">📈 Desconto até ${R(disc(t2.min-1,t1.pct))}</span></div>
+      <div class="pk-tier t2"><div class="pk-n">Faixa 2</div><div class="pk-pct">${P1(t2.pct)}</div><div class="pk-rng">De ${R(t2.min)} até abaixo de ${R(t3.min)}</div><div class="pk-kv"><span>Desconto na entrada</span><b class="g">${R(disc(t2.min,t2.pct))}</b></div><div class="pk-kv"><span>Valor final na entrada</span><b>${R(f2)}</b></div><div class="pk-kv"><span>Crescimento vs. média</span><b>${G(t2.min)}</b></div><span class="pk-tag">📈 Desconto até ${R(disc(t3.min-1,t2.pct))}</span></div>
+      <div class="pk-tier t3"><div class="pk-n">Faixa 3</div><div class="pk-pct">${P1(t3.pct)}</div><div class="pk-rng">Acima de ${R(t3.min)}</div><div class="pk-kv"><span>Desconto na entrada</span><b class="g">${R(disc(t3.min,t3.pct))}</b></div><div class="pk-kv"><span>Valor final na entrada</span><b>${R(f3)}</b></div><div class="pk-kv"><span>Crescimento vs. média</span><b>${G(t3.min)}</b></div><span class="pk-tag">🏆 Sem teto de desconto</span></div>
+    </div>
+
+    <div class="card" style="margin-bottom:20px;"><div class="card-header"><div class="card-title">Simulação por faixa — desconto e valor final</div><span style="background:#eff3ff;color:var(--blue);font-size:11px;font-weight:600;padding:3px 10px;border-radius:100px">valores mensais de frete</span></div>
+      <div class="table-scroll"><table class="pk-table"><thead><tr><th>Frete enviado no mês</th><th>Faixa</th><th>Desconto</th><th>Economia (R$)</th><th>Valor final</th><th>Vs. média</th></tr></thead><tbody>
+        <tr><td>${R(base)} <span style="color:var(--gray-400);font-size:11px">(média atual)</span></td><td>Base</td><td>0%</td><td>—</td><td>${R2(base)}</td><td>—</td></tr>
+        ${rowsV.map(v=>row(v, v===t3.min)).join('\n        ')}
+      </tbody></table></div>
+      <p class="pk-note">Economia = percentual da faixa aplicado sobre o valor total de frete do mês. Em destaque, a entrada da Faixa 3: ${R(t3.min)} em frete com valor final de ${R(f3)}${degrausBeats?', menor do que o valor final na entrada da Faixa 2':''}.</p>
+    </div>
+
+    <div class="card" style="margin-bottom:20px;"><div class="card-header"><div class="card-title">Qual a vantagem para a ${nm}</div></div>
+      <div class="pk-adv">
+        <div class="pk-adv-i gr"><h4>💸 Desconto sobre o valor inteiro</h4><p>O percentual vale sobre todo o frete do mês, não só sobre o que cresceu. Na Faixa 3, os <b>${R(extra)}</b> a mais que a média custam, na prática, só <b>${R(paid)}</b> a mais na fatura: é como pagar <b>~${less}% menos</b> por todo o volume adicional.</p></div>
+        <div class="pk-adv-i am"><h4>🏆 ${degrausBeats?'Enviar mais pode sair mais barato':'Quanto mais envia, maior o desconto'}</h4><p>${adv2}</p></div>
+        <div class="pk-adv-i"><h4>📈 Degraus que valem a pena</h4><p>Passar de ${R(t2.min-1)} para ${R(t2.min)} aumenta o desconto de ${R(dPrev1)} para <b>${R(dNow1)}</b> (+${R(dNow1-dPrev1)}). Passar de ${R(t3.min-1)} para ${R(t3.min)} aumenta de ${R(dPrev2)} para <b>${R(dNow2)}</b> (+${R(dNow2-dPrev2)}). Perto de um degrau, vale concentrar os envios na coleta Mandaê.</p></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:20px;"><div class="card-header"><div class="card-title">Simulador de desconto</div><span style="background:#eff3ff;color:var(--blue);font-size:11px;font-weight:600;padding:3px 10px;border-radius:100px">digite o frete do mês</span></div>
+      <div class="pk-sim">
+        <div>
+          <label for="pkIn">Valor de frete enviado no mês</label>
+          <div class="pk-in"><span>R$</span><input id="pkIn" type="text" inputmode="numeric" value="${t3.min.toLocaleString('pt-BR')}"></div>
+          <input class="pk-range" id="pkRg" type="range" min="${L.min}" max="${L.max}" step="${L.slider}" value="${t3.min}" aria-label="Valor de frete no mês">
+          <div class="pk-quick"><button data-v="${base}">Média atual</button><button data-v="${t1.min}">Faixa 1</button><button data-v="${t2.min}">Faixa 2</button><button data-v="${t3.min}">Faixa 3</button></div>
+        </div>
+        <div class="pk-res">
+          <div><span>Faixa</span><b id="pkF">—</b></div>
+          <div><span>Desconto</span><b id="pkP">—</b></div>
+          <div><span>Economia na fatura</span><b class="g" id="pkE">—</b></div>
+          <div><span>Valor final</span><b id="pkV">—</b></div>
+          <div class="pk-next" id="pkN">—</div>
+        </div>
+      </div>
+      <div class="pk-bar"><div class="pk-bar-f" id="pkBar"></div>${mk(base,'Média '+K(base),true)}${mk(t1.min,PN(t1.pct)+' · '+K(t1.min),false)}${mk(t2.min,PN(t2.pct)+' · '+K(t2.min),true)}${mk(t3.min,PN(t3.pct)+' · '+K(t3.min),false)}</div>
+    </div>
+${acomp}
+  </section>`;
+}
+
+/* Simulador da aba (roda no painel gerado, depois do script principal) */
+function PEAK_INIT(C){
+  var T=C.T, MIN=C.min, MAX=C.max;
+  var inp=document.getElementById('pkIn'), rg=document.getElementById('pkRg'); if(!inp||!rg) return;
+  var brl=function(v){return 'R$ '+v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});};
+  function tier(v){for(var i=0;i<T.length;i++){if(v>=T[i][0])return T[i];}return [0,0,'Sem desconto'];}
+  function upd(v){
+    var t=tier(v),e=v*t[1]/100;
+    document.getElementById('pkF').textContent=t[2];
+    document.getElementById('pkP').textContent=t[1].toLocaleString('pt-BR')+'%';
+    document.getElementById('pkE').textContent=e?brl(e):'—';
+    document.getElementById('pkV').textContent=brl(v-e);
+    var nx=null;for(var i=T.length-1;i>=0;i--){if(v<T[i][0]){nx=T[i];break;}}
+    var n=document.getElementById('pkN');
+    if(nx){var e2=nx[0]*nx[1]/100;n.innerHTML='Faltam <b>'+brl(nx[0]-v)+'</b> para a '+nx[2]+' ('+nx[1].toLocaleString('pt-BR')+'%): desconto passaria a <b>'+brl(e2)+'</b> e o valor final a <b>'+brl(nx[0]-e2)+'</b>.';}
+    else n.innerHTML='🏆 Faixa máxima atingida: <b>'+T[0][1].toLocaleString('pt-BR')+'% de desconto</b> sobre todo o frete do mês.';
+    var pct=Math.max(0,Math.min(100,(v-MIN)/(MAX-MIN)*100));document.getElementById('pkBar').style.width=pct+'%';
+  }
+  function parse(s){var v=parseFloat(String(s).replace(/\./g,'').replace(',','.').replace(/[^\d.]/g,''));return isNaN(v)?0:v;}
+  inp.addEventListener('input',function(){var v=parse(inp.value);rg.value=Math.max(MIN,Math.min(MAX,v));upd(v);});
+  inp.addEventListener('blur',function(){inp.value=Math.round(parse(inp.value)).toLocaleString('pt-BR');});
+  rg.addEventListener('input',function(){var v=+rg.value;inp.value=v.toLocaleString('pt-BR');upd(v);});
+  document.querySelectorAll('.pk-quick button').forEach(function(b){b.addEventListener('click',function(){var v=+b.dataset.v;inp.value=v.toLocaleString('pt-BR');rg.value=Math.max(MIN,Math.min(MAX,v));upd(v);});});
+  upd(C.init);
+}
+function peakScriptTag(P){
+  const L = peakLimits(P), t = P.tiers;
+  const C = {T:[[t[2].min,t[2].pct,'Faixa 3'],[t[1].min,t[1].pct,'Faixa 2'],[t[0].min,t[0].pct,'Faixa 1']], min:L.min, max:L.max, init:t[2].min};
+  return '<script>'+PEAK_INIT.toString()+'\ntry{ PEAK_INIT('+JSON.stringify(C)+'); }catch(e){ console.error("peak",e); }</scr'+'ipt>';
+}
+/* ===================== FIM DO MÓDULO AÇÃO BLACK FRIDAY ===================== */
 
 </script>
 <script>
@@ -1246,6 +1518,13 @@ function buildFinalHTML(cfg){
     sections.push(sec);
     firstActive = false;
   }
+  if(cfg.includePeak && cfg.peak){
+    navBtns.push(`<button class="nav-btn${firstActive?' active':''}" data-target="peak">🏷️ Ação Black Friday</button>`);
+    let sec = buildPeakSection(cfg.peak, cfg.clientName, cfg.peakOut);
+    if(firstActive) sec = sec.replace('class="section" id="peak"', 'class="section active" id="peak"');
+    sections.push(sec);
+    firstActive = false;
+  }
   if(cfg.includePerformance && cfg.perfData && cfg.perfData.length){
     navBtns.push(`<button class="nav-btn${firstActive?' active':''}" data-target="performance">📊 Performance</button>`);
     let sec = buildPerformanceSection(cfg.perfData, cfg.clientName, periodLabel, colors, cfg.tktData);
@@ -1269,7 +1548,8 @@ function buildFinalHTML(cfg){
 
   const today = new Date();
   const dataAtual = today.toLocaleDateString('pt-BR', {day:'2-digit', month:'long', year:'numeric'});
-  const css = CSS_BLOCK + (cfg.includeEsquenta ? ESQ_CSS : '');
+  const css = CSS_BLOCK + (cfg.includeEsquenta ? ESQ_CSS : '') + (cfg.includePeak && cfg.peak ? PEAK_CSS : '');
+  const peakTag = (cfg.includePeak && cfg.peak) ? peakScriptTag(cfg.peak) : '';
 
   const chartInit = CHART_JOBS.map(j=>`
     (function(){ const el=document.getElementById(${JSON.stringify(j.id)}); if(!el) return;
@@ -1353,7 +1633,7 @@ ${css}
 <header class="header"><div class="header-inner"><div class="header-left"><div class="logo-row"><span class="logo-badge">Mandaê</span><span class="logo-sep">×</span><span class="logo-badge">${cfg.clientName}</span></div><div class="header-title">Mandaê × ${cfg.clientName} — Painel da Parceria</div><div class="header-sub">Painel de acompanhamento da parceria</div></div><div class="header-meta"><span class="parceria-badge">✦ Parceria Ativa</span><span class="date-label">Atualizado em ${dataAtual}</span></div></div></header>
 <nav class="nav" id="main-nav">${navBtns.join('\n')}</nav>
 ${sections.join('\n')}
-<script>${bodyScript}</scr` + `ipt>
+<script>${bodyScript}</scr` + `ipt>${peakTag}
 </body>
 </html>`;
 }
@@ -1377,6 +1657,7 @@ toggleBlock('chkPerformance', 'blockEnvios');
 toggleBlock('chkTickets', 'blockTickets');
 toggleBlock('chkProcessos', null);
 toggleBlock('chkEsquenta', null);
+toggleBlock('chkPeak', 'blockPeak');
 toggleBlock('chkFaturamento', null);
 
 function wireDrop(dropId, fileId){
@@ -1432,6 +1713,30 @@ wireDrop('dropTickets','fileTickets');
 
 document.getElementById('clientName').addEventListener('input', (e)=>{ e.target.dataset.userEdited = '1'; });
 
+/* Ação Black Friday: confere a linha colada na hora e preenche o nome do cliente se ainda estiver vazio */
+document.getElementById('peakPaste').addEventListener('input', ()=>{
+  const out = document.getElementById('peakCheck'); out.innerHTML = '';
+  const txt = document.getElementById('peakPaste').value;
+  if(!txt.trim()) return;
+  const span = document.createElement('span');
+  try{
+    const P = parsePeakRow(txt);
+    const R = v=>'R$ '+Math.round(v).toLocaleString('pt-BR');
+    span.className = 'ok';
+    span.textContent = '✓ ' + P.nome + ' · média ' + R(P.base) + ' · faixas: ' + P.tiers.map(t=>t.pct.toLocaleString('pt-BR')+'% a partir de '+R(t.min)).join(' | ');
+    out.appendChild(span);
+    if(!P.avgOk){
+      const w = document.createElement('div');
+      w.textContent = 'Atenção: a média da planilha não bate com a média dos 3 meses lidos (' + P.months.map(R).join(', ') + '). Confira se colou a linha certa.';
+      out.appendChild(w);
+    }
+    const clientInput = document.getElementById('clientName');
+    if(P.nome && !clientInput.value.trim() && !clientInput.dataset.userEdited){ clientInput.value = P.nome; }
+  }catch(e){
+    span.className = 'err'; span.textContent = e.message; out.appendChild(span);
+  }
+});
+
 function log(msg, cls){
   const el = document.getElementById('log');
   const span = document.createElement('div');
@@ -1451,10 +1756,12 @@ document.getElementById('btnGerar').addEventListener('click', async ()=>{
     const includePerformance = document.getElementById('chkPerformance').checked;
     const includeTickets = document.getElementById('chkTickets').checked;
     const includeEsquenta = document.getElementById('chkEsquenta').checked;
+    const includePeak = document.getElementById('chkPeak').checked;
     const includeFaturamento = includePerformance && document.getElementById('chkFaturamento').checked;
 
     let perfData = [];
     let tktData = [];
+    let peakUltimoEnvio = null;
 
     if(includePerformance){
       const f = document.getElementById('fileEnvios').files[0];
@@ -1462,6 +1769,7 @@ document.getElementById('btnGerar').addEventListener('click', async ()=>{
       log('Lendo arquivo de envios...');
       const rows = await sheetToRows(f);
       perfData = aggregateEnvios(rows);
+      if(includePeak) peakUltimoEnvio = peakLastShip(rows);
       log('Envios processados: ' + perfData.length + ' mês(es) encontrados.', 'ok');
     }
     if(includeTickets){
@@ -1473,10 +1781,19 @@ document.getElementById('btnGerar').addEventListener('click', async ()=>{
       log('Tickets processados: ' + tktData.length + ' mês(es) encontrados.', 'ok');
     }
 
+    let peak = null, peakOut = null;
+    if(includePeak){
+      peak = parsePeakRow(document.getElementById('peakPaste').value);
+      const oct = (perfData||[]).find(m=>m.idx===9);
+      if(oct) peakOut = {fat: oct.faturamento||0, ate: peakUltimoEnvio};
+      log('Ação Black Friday: régua lida da planilha' + (peakOut ? ' (outubro vindo do arquivo de Envios).' : ' (sem acompanhamento de outubro: inclua a aba Performance com o arquivo de Envios para exibi-lo).'), 'ok');
+    }
+
     const finalHTML = buildFinalHTML({
       clientName,
       includeSobre, includeProcessos, includePerformance, includeTickets,
       includeEsquenta, includeFaturamento,
+      includePeak, peak, peakOut,
       perfData, tktData
     });
 
