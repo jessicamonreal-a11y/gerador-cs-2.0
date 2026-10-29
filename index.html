@@ -533,7 +533,9 @@ function parsePeakRow(text){
   const cells = line.split('\t').map(c=>c.trim().replace(/^"+|"+$/g,'').trim()).filter(c=>c!=='');
   const isMoney = c=>/^R\$\s*-?\d[\d.]*(,\d+)?$/.test(c);
   const isPct = c=>/^\d+([,.]\d+)?\s*%$/.test(c);
-  const iPct = cells.findIndex(isPct);
+  // a régua começa na célula do 0% que precede o texto "Abaixo de R$ ..."; as colunas de % antes dela (ex.: 70,27%, -11,28%) são de outros indicadores
+  const iAbaixo = cells.findIndex(c=>/^abaixo\s+de/i.test(c));
+  const iPct = (iAbaixo>0 && isPct(cells[iAbaixo-1])) ? iAbaixo-1 : cells.findIndex(isPct);
   if(iPct<0) throw new Error('Ação Black Friday: não encontrei as colunas de faixa (percentuais de desconto) na linha colada.');
   const head = cells.slice(0,iPct), tail = cells.slice(iPct);
   const iFirst = head.findIndex(isMoney);
@@ -545,6 +547,9 @@ function parsePeakRow(text){
   const months = run.slice(run.length-4, run.length-1);  // os 3 meses que antecedem a média
   const pcts = tail.filter(isPct).map(peakPct);
   const mins = tail.filter(isMoney).map(peakMoney);
+  // o % da célula pode vir arredondado pela planilha (ex.: 2,5% exibido como 3%); o texto "... - 2,5% de desconto" traz o valor exato
+  const txtPcts = tail.map(c=>{ const mm = c.match(/(\d+(?:[,.]\d+)?)\s*%\s*de\s+desconto/i); return mm ? peakPct(mm[1]) : null; }).filter(v=>v!==null);
+  if(txtPcts.length===3) { pcts.splice(1,3,txtPcts[0],txtPcts[1],txtPcts[2]); }
   if(pcts.length<4 || mins.length<3) throw new Error('Ação Black Friday: esperava Base + 3 faixas (percentual e valor de entrada), mas a linha colada tem menos.');
   const tiers = [0,1,2].map(i=>({min:mins[i], pct:pcts[i+1]}));
   if(!(base>0)) throw new Error('Ação Black Friday: a média de frete veio zerada.');
